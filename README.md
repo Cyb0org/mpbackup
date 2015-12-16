@@ -46,13 +46,17 @@ Install
 - configure variables on top of the mpbackup.sh
 - add hosts and access credentials to mpbackup-hosts.conf (make sure it has 600 permissions, so nobody can read it besides you!)
 - add script to cron (without any blackout time - BEWARE!):
+
 <pre>
 * *	* * *	root /path/to/mpbackup.sh
 </pre>
+
 - or to your crontab:
+
 <pre>
 * *	* * *	/path/to/mpbackup.sh
 </pre>
+
 - live happily ever after with backups :)
 
 Configuration
