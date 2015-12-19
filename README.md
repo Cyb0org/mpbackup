@@ -31,6 +31,7 @@ Those are features of this backup script (mostly features of btrfs anyway):
 - blackout time (via cron)
 - limiting simultaneously running scripts (globally)
 - only one rsync can start per share
+- only one share backup is done while running script and then script quits - helps with blackout time
 - limiting count of existing backups (per share of the host)
 - marking completed backups as complete - not marked are partial
 - verbose echo to know what's going on
@@ -51,12 +52,6 @@ Install
 * *	* * *	root /path/to/mpbackup.sh
 </pre>
 
-- or to your crontab:
-
-<pre>
-* *	* * *	/path/to/mpbackup.sh
-</pre>
-
 - live happily ever after with backups :)
 
 Configuration
@@ -64,17 +59,18 @@ Configuration
 
 mpbackup.sh variables and contents of mpbackup-host.conf should be easy to understand.
 
-I will explain more only date format. I assume that you start script once a minute.
+I will explain more only date format. I'm assuming that you've set up cron to start script every minute.
 
-- "%Y%m%d-%H" - this will give you ability to have backups created once per hour (20151216-01 20151216-02 etc.)
+- "%Y%m%d-%H" - this will give you ability to have backups created every hour (20151216-01 20151216-02 etc.)
 - "%Y%m%d" - here you have daily backup
 - "%Y%m%d-%H%M%S" - here you have backup (almost) every time you start script
 
-Above configuration will of course depends when do you want to make blackout time. Below is quite good configuration for standard servers with local services.
+Below is quite good configuration for standard servers with local services.
 
 date format: "%Y%m%d"
 
 and crontab:
+
 <pre>
 * 0-5	* * mon-fri	/path/to/mpbackup.sh
 * 22-23	* * mon-fri	/path/to/mpbackup.sh
@@ -86,7 +82,7 @@ Remarks
 
 - rsync transmission is not encrypted - use VPN or SSH to transfer data
 - tools to see space usage of backups (btrfs subvolumes): https://btrfs.wiki.kernel.org/index.php/Quota_support
-- use latest stable kernel possible - for Debian Jessie use backports for Linux 4.2
+- use latest stable kernel possible - for Debian Jessie use backports for Linux 4.2 or try 4.3.3 from unstable: https://packages.debian.org/sid/amd64/linux-image-4.3.0-1-amd64/download
 - deduplication: https://github.com/markfasheh/duperemove
 - btrfs is still in development, so it's not so stable as ext2/3/4/xfs - you've been warned
 - it's NOT replacement for BackupPC :) but it's a start

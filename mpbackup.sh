@@ -25,7 +25,11 @@ VERBOSE_ECHO="yes"
 # syslog what mpbackup do
 SYSLOG_ECHO="no"
 # simulate execution
-SIMULATION="yes"
+SIMULATION="no"
+# always run filesystem sync after rsync is done
+ALWAYS_SYNC="yes"
+# inform only about rsync - VERBOSE_ECHO or SYSLOG_ECHO must be set!
+ONLY_ECHO_RSYNC="yes"
 
 ########## DON'T MAKE ANY CHANGES BELOW!!! ##########
 
@@ -36,7 +40,7 @@ check_config()
 {
 	PERMISSIONS=`stat -c '%a' ${BACKUP_HOSTS}`
 	if [ "${PERMISSIONS:2:1}" != "0" ]; then
-		verbose_echo "Config file is world-readable! You have passwords in there!"
+		verbose_echo "Config file is world-readable! You have passwords there! Do following:"
 		verbose_echo "chmod 600 ${BACKUP_HOSTS}"
 		exit 0
 	fi
@@ -70,7 +74,7 @@ prepare_backup()
 
 			# it is! but is it up to date?
 			if [ "${DATE}" = "${LAST_BACKUP_DATE}" ]; then
-				verbose_echo "Backup for current date is complete. Won't do anything more for this host."
+				verbose_echo "Backup for current date is complete. Won't do now anything more for this host."
 				# it is! move along... there's nothing to see here...
 				MAKE_BACKUP="no"
 			else
@@ -137,7 +141,7 @@ create_snapshot()
 make_backup()
 {
 	if [ "${MAKE_BACKUP}" = "yes" ]; then
-		verbose_echo "Creating backup in '${SHAREDIR}/${DATE}'"
+		rsync_echo "Creating backup in '${SHAREDIR}/${DATE}'"
 		# rsync stuff here
 		if [ "$NEW_BACKUP" = "yes" ]; then
 			# handlling of sparse file - file size 0 with virtually reserved 20GB
@@ -149,31 +153,47 @@ make_backup()
 		exec_exec rsync --archive --human-readable --perms --xattrs --inplace --delete --delete-excluded --compress --numeric-ids --stats --password-file=${BACKUP_DIR}/${HOST_ALIAS}/rsyncd.secrets rsync://${USER}@${HOST}/${SHARE}/ ${SHAREDIR}/${DATE}/ >> ${SHAREDIR}/${DATE}.log
 		# if it's complete - mark it as complete
 		if [ "$?" = "0" ]; then
-			verbose_echo "rsync finished successfully. Marking as complete."
+			rsync_echo "rsync finished successfully. Marking as complete."
 			exec_exec touch "${SHAREDIR}/${DATE}.complete"
+			RSYNC_DONE="yes"
 		elif [ "$?" = "1" ]; then
-			verbose_echo "rsync work has been interrupted. I'll better quit."
+			rsync_echo "rsync work has been interrupted. I'll better quit."
 			exit 0
 		else
-			verbose_echo "rsync returned error '${?}'."
+			rsync_echo "rsync returned error '${?}'."
+		fi
+
+		if [ "${ALWAYS_SYNC}" = "yes" ]; then
+			verbose_echo "Forcing filesystem sync."
+			sync
 		fi
 	else
-		verbose_echo "I won't do any backup for '${SHAREDIR}'!"
+		verbose_echo "I won't do now any backup for '${SHAREDIR}'!"
 	fi
+}
+
+rsync_echo()
+{
+	ECHO_RSYNC="yes"
+	verbose_echo $@
 }
 
 # cool output to know what script is doing
 verbose_echo()
 {
-	if [ "${VERBOSE_ECHO}" = "yes" ]; then
-		if [ "${HOST_ALIAS}" != "" ]; then
-			echo `date +"%Y-%m-%d %H:%M:%S"`" ${HOST_ALIAS} [${SHARE}@${HOST}]: $@"
-		else
-			echo `date +"%Y-%m-%d %H:%M:%S"`" $@"
+	if [ \( \( "${ONLY_ECHO_RSYNC}" = "yes" \) -a \( "${ECHO_RSYNC}" = "yes" \) \) -o \( "${ONLY_ECHO_RSYNC}" = "no" \) ]; then
+		if [ "${VERBOSE_ECHO}" = "yes" ]; then
+			if [ "${HOST_ALIAS}" != "" ]; then
+				echo `date +"%Y-%m-%d %H:%M:%S"`" ${HOST_ALIAS} [${SHARE}@${HOST}]: $@"
+			else
+				echo `date +"%Y-%m-%d %H:%M:%S"`" $@"
+			fi
 		fi
-	fi
-	if [ "${SYSLOG_ECHO}" = "yes" ]; then
-		logger -t mpbackup "${HOST_ALIAS} [${SHARE}@${HOST}]: $@"
+		if [ "${SYSLOG_ECHO}" = "yes" ]; then
+			logger -t mpbackup "${HOST_ALIAS} [${SHARE}@${HOST}]: $@"
+		fi
+
+		ECHO_RSYNC=""
 	fi
 }
 
@@ -239,6 +259,10 @@ for HOST_DATA in `cat ${BACKUP_HOSTS} | egrep -v '^#'`; do
 		make_backup
 		delete_old_backups
 		lockfile-remove -q -l "/var/lock/mpbackup.${HOST_ALIAS}.${SHARE}.lock"
+		# make sure we don't make more backups than one per script run
+		if [ "${RSYNC_DONE}" = "yes" ]; then
+			break
+		fi
 	fi
 done
 
